@@ -1,0 +1,29 @@
+[project]
+name = "learning"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "datasets==5.2.0",
+  "datasheet==1.2.3",
+  "onnxsim==0.8.1",
+  "onnxslim==0.1.99",
+  "opencv-python==5.1.0.95",
+  "pybind11==3.1.0",
+  "torch==2.15.0+cpu",
+  "torchaudio==2.11.1+cpu",
+  "torchvision==0.29.2+cpu",
+  "ultralytics==8.4.215",
+]
+
+[tool.uv]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
