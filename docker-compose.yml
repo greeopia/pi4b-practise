@@ -1,0 +1,130 @@
+name: gitea
+
+# 内存上限和 swap 设置需要宿主机启用 memory cgroup。
+networks:
+  gitea:
+    driver: bridge
+  tools:
+    driver: bridge
+
+volumes:
+  gitea:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+
+services:
+  gitea:
+    image: docker.io/gitea/gitea:28.4.0
+    container_name: gitea
+    restart: unless-stopped
+    init: true
+    environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      TZ: Asia/Shanghai
+      GOMEMLIMIT: 192MiB
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__database__PATH: /data/gitea/gitea.db
+      GITEA__server__DOMAIN: "${GITEA_DOMAIN:?GITEA_DOMAIN not set}"
+      GITEA__server__ROOT_URL: "https://${GITEA_DOMAIN}/"
+      GITEA__server__HTTP_ADDR: "0.0.0.0"
+      GITEA__server__HTTP_PORT: "3000"
+      GITEA__server__SSH_DOMAIN: "${GITEA_DOMAIN}"
+      GITEA__server__SSH_PORT: "2221"
+      GITEA__server__LFS_START_SERVER: "true"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__service__REQUIRE_SIGNIN_VIEW: "true"
+      GITEA__repository__DEFAULT_PRIVATE: private
+      GITEA__repository__ENABLE_PUSH_CREATE_USER: "false"
+      GITEA__repository__ENABLE_PUSH_CREATE_ORG: "false"
+      GITEA__actions__ENABLED: "false"
+    volumes:
+      - gitea:/data
+    networks:
+      - gitea
+    ports:
+      - "2221:22"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/api/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 384m
+    mem_reservation: 96m
+    memswap_limit: 384m
+    cpus: 1.0
+    pids_limit: 256
+
+  caddy:
+    image: docker.io/library/caddy:2.11.9-alpine
+    container_name: caddy
+    restart: unless-stopped
+    init: true
+    environment:
+      GITEA_DOMAIN: "${GITEA_DOMAIN:?GITEA_DOMAIN not set}"
+      TZ: Asia/Shanghai
+      GOMEMLIMIT: 64MiB
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      gitea:
+        # 首次配置时也要能通过 Caddy 打开 Gitea 安装页。
+        condition: service_started
+    networks:
+      - gitea
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    mem_reservation: 32m
+    memswap_limit: 128m
+    cpus: 0.25
+    pids_limit: 128
+
+  sqlite-web:
+    image: ghcr.io/coleifer/sqlite-web:0.8.2
+    container_name: sqlite-web
+    # 完成 Gitea 初始化后按需启动，默认不参与启动。
+    profiles: ["tools"]
+    restart: "no"
+    init: true
+    command: ["--read-only", "/data/gitea/gitea.db"]
+    volumes:
+      - gitea:/data:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - tools
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+    mem_reservation: 16m
+    memswap_limit: 64m
+    cpus: 0.25
+    pids_limit: 128
