@@ -8,10 +8,52 @@ public:
     class id{
         native_handle_type	_M_thread; // 线程句柄
         /*
-            这里可以像FreeRTOS一样自定义很多东西，通过posix接口
-            pthread_setschedparam
-            pthread_setaffinity_np
-            pthread_setname_np
+
+            通过 native_handle() 拿到原生的 pthread_t 句柄后，这里可以像FreeRTOS一样自定义很多东西，通过posix接口
+            想要超级自定义可以直接用pthread_create
+
+            调度与调试
+            pthread_setschedparam()
+            pthread_attr_setschedpolicy()
+            pthread_setschedprio()
+            pthread_setname_np()
+            sched_setscheduler()
+            sched_setattr // through syscall() -> 孩子们真真可以手动系统调用，虽然是在thread开始之前
+            不限于 main 函数——任何线程调用 pthread_create 创建新线程时，都会发生线程继承
+                pthread_attr_setinheritsched() -> PTHREAD_INHERIT_SCHED PTHREAD_EXPLICIT_SCHED -> pthread_attr_t
+                "在创建线程前，通过 pthread_attr_setinheritsched() 将 inheritsched 属性设为 PTHREAD_EXPLICIT_SCHED，强制新线程使用属性对象中显式设置的策略和优先级，而不是从父线程继承"
+
+            线程在多linux核的绑定
+            pthread_setaffinity_np() // cpu_set_t Cgroup
+            pthread_getaffinity_np()
+
+            内存相关：(mainly to avoid Page Fault)
+            1.越过mmap: 
+                mlockall(MCL_CURRENT | MCL_FUTURE); 
+                pthread_attr_setstacksize()
+                pthread_attr_setstack()
+
+            signal && timers
+            pthread_sigmask() // eee没了很多中断只有特定的几种signal...
+            sigwait()
+            sigwaitinfo()
+
+        ---others---
+
+            关于锁
+            其实有很多() glibc好像有坑
+            std::mutex pthread_mutex_t (其实现在mutex含有一部分spinlock) -> pthread_mutexattr_t
+                pthread_mutexattr_settype() -> pthread_mutexattr_t
+                    PTHREAD_MUTEX_NORMAL PTHREAD_MUTEX_ERRORCHECK PTHREAD_MUTEX_RECURSIVE PTHREAD_MUTEX_DEFAULT
+                可以有pthread_mutexattr_setprotocol() -> PTHREAD_PRIO_INHERIT PTHREAD_PRIO_PROTECT
+                pthread_mutexattr_setprioceiling()
+            spinlock pthread_spinlock_t
+            读写锁 std::shared_mutex pthread_rwlock_rdlock() pthread_rwlock_wdlock()
+
+            条件变量 && 信号量 (可以与FreeRTOS衔接一下)
+            ...
+            消息队列，mailbox，软件定时器 ...etc
+
         */
     public:
         id() noexcept : _M_thread{} {}
@@ -82,7 +124,7 @@ public:
 
     native_handle_type native_handle() { return _M_id._M_thread; } // 暴露句柄的api
 
-    static uint8_t hardware_concurrency() noexcept;
+    static unsigned int hardware_concurrency() noexcept;
 
 private:
     struct _State {
